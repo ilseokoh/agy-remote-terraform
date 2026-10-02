@@ -335,10 +335,12 @@ resource "google_vpc_access_connector" "shared_cloudrun_connector" {
 # 8. Cloud Run Service (remote-browser-vm1)
 # ------------------------------------------------------------------------------
 resource "google_cloud_run_v2_service" "remote_browser_vm1" {
-  project  = var.project_id
-  name     = var.cloud_run_service_name
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
+  project              = var.project_id
+  name                 = var.cloud_run_service_name
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_ALL"
+  invoker_iam_disabled = true
+  deletion_protection  = false
 
   template {
     service_account                  = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
@@ -400,16 +402,3 @@ resource "google_cloud_run_v2_service" "remote_browser_vm1" {
   ]
 }
 
-# Allow unauthenticated invocations (--allow-unauthenticated)
-resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
-  project  = google_cloud_run_v2_service.remote_browser_vm1.project
-  location = google_cloud_run_v2_service.remote_browser_vm1.location
-  name     = google_cloud_run_v2_service.remote_browser_vm1.name
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-
-  depends_on = [
-    google_org_policy_policy.require_invoker_iam,
-    terraform_data.wait_for_org_policy_propagation,
-  ]
-}
