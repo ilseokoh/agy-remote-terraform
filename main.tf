@@ -55,16 +55,36 @@ resource "google_project_organization_policy" "vm_external_ip_access" {
   depends_on = [google_project_service.apis]
 }
 
-resource "google_project_organization_policy" "require_invoker_iam" {
-  count      = var.manage_org_policies ? 1 : 0
-  project    = var.project_id
-  constraint = "constraints/run.managed.requireInvokerIam"
+resource "google_org_policy_policy" "require_invoker_iam" {
+  count  = var.manage_org_policies ? 1 : 0
+  name   = "projects/${var.project_id}/policies/run.managed.requireInvokerIam"
+  parent = "projects/${var.project_id}"
 
-  boolean_policy {
-    enforced = false
+  spec {
+    rules {
+      enforce = "FALSE"
+    }
   }
 
-  depends_on = [google_project_service.apis]
+  depends_on = [
+    google_project_service.apis["orgpolicy.googleapis.com"]
+  ]
+}
+
+# GCP Organization Policy 변경 사항이 Compute Engine / Cloud Run에 전파되기까지
+# 약 30~60초가 소요되므로 대기 후 리소스를 생성합니다.
+resource "terraform_data" "wait_for_org_policy_propagation" {
+  count = var.manage_org_policies ? 1 : 0
+
+  provisioner "local-exec" {
+    command = "echo 'Waiting 60s for GCP Org Policy propagation...' && sleep 60"
+  }
+
+  depends_on = [
+    google_project_organization_policy.require_os_login,
+    google_project_organization_policy.vm_external_ip_access,
+    google_org_policy_policy.require_invoker_iam,
+  ]
 }
 
 # ------------------------------------------------------------------------------
@@ -281,6 +301,7 @@ resource "google_compute_instance" "ag_vm_1" {
   depends_on = [
     google_project_organization_policy.require_os_login,
     google_project_organization_policy.vm_external_ip_access,
+    terraform_data.wait_for_org_policy_propagation,
     google_project_iam_member.antigravity_sa_roles,
   ]
 }
@@ -368,7 +389,8 @@ resource "google_cloud_run_v2_service" "remote_browser_vm1" {
 
   depends_on = [
     google_project_service.apis["run.googleapis.com"],
-    google_project_organization_policy.require_invoker_iam,
+    google_org_policy_policy.require_invoker_iam,
+    terraform_data.wait_for_org_policy_propagation,
   ]
 }
 
@@ -381,6 +403,7 @@ resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
   member   = "allUsers"
 
   depends_on = [
-    google_project_organization_policy.require_invoker_iam,
+    google_org_policy_policy.require_invoker_iam,
+    terraform_data.wait_for_org_policy_propagation,
   ]
 }
