@@ -294,6 +294,12 @@ resource "google_compute_instance" "ag_vm_1" {
     startup-script         = file("${path.module}/startup-script.sh")
   }
 
+  shielded_instance_config {
+    enable_secure_boot          = true
+    enable_vtpm                 = true
+    enable_integrity_monitoring = true
+  }
+
   labels = {
     goog-terraform-provisioned = "true"
   }
